@@ -12,63 +12,20 @@
 
 | 분류 | 패턴 | 1. problem | 2. solution | 3. consequence | 4. example |
 | --- | --- | --- | --- | --- | --- |
-| Sequence | **Local Sequencer
-
-같은 파이프라인/같은 잡 안에서 순차 실행** | 실패 시 처음부터 재실행, 코드 비대화, 디버깅 어려움 | 큰 작업을 작은 순차 단계로 분해 | [+] 비싼 단계 재실행 방지 가능
-[-] 너무 잘게 쪼개면 스케줄링 부담 증가 |   1. Airflow: `>>`, 
-  2. aws EMR: Step API(실패시 의존성 구성 필요) ← vs CRON(간결; 독립성x) |
-|  | **Isolated Sequencer
-
-서로 분리된 파이프라인 간 순차 의존** | 팀 간 책임 분리, 독립 파이프라인 협업 | 분리된 파이프라인 사이 의존성 연결 | [+] 팀별 분리 운영 가능
-[-] 스케줄 정합성, 커뮤니케이션 비용 |   1. airflow(waiter컴포넌트, 
-  • 암묵적 데이터(sensor) 의존성 
-  • 2개 연산자marker&sensor 독립적 사용 |
-| Fan-In | **Aligned Fan-In
-
-여러 부모가 모두 성공→ 자식 실행** | 여러 부분 결과가 모두 필요함 | 병렬 브랜치 결과를 정확하게 합치기 | [+] 작은 병렬 작업으로 빠른 피드백
-[-] 인프라 스파이크, skew, 스케줄링 오버헤드 |   • (여러 브랜치 + 공통 child)
-  1. Airflow: for문 안 파이프라인 시퀀스 1번만 정→전용태스크 생성 후 공통 상위태스크에 연결
-  2. SQL: `UNION`, `JOIN`
-  3. Spark: `unionByName` |
-|  | **Unaligned Fan-In
-
-일부 부모 실패를 허용→ 자식 실행** | 일부 입력 누락 때문에 전체 결과가 막힘 | 실패 일부를 허용한 채 결과 생성 | [+] 전체 지연 감소
-[-] partial 품질 고지 필요, 흐름 이해 어려움 |   • (올바른 트리거 설정 사용)
-  1. Airflow: `trigger_rule=ALL_DONE`, 서브쿼리 활용~새로운 플래그(완전한 입력 데이터에 기반한것인지 유무 확인)
-  2. aws: step function(덜 선언적인 구현)
-detector(1회)
-→processor(성공여부 플래그생성)
-→creator(오류가 있다면 테이블에 메타데이터 주석) |
-| Fan-Out | **Parallel Split
-
-하나의 부모에서 여러 자식이 병렬 분기** | 같은 데이터를 두 군데 이상에 써야 함 | 공통 입력 기반 다중 후속 처리 | [+] 공통 입력 재사용, 다중 처리 효율
-[-] 느린 브랜치가 병목, 하드웨어 불일치 문제 |   1. Airflow 공통 부모 후 여러 downstream
-  2. Spark: `persist()` 후 다중 write
-  3. 재시도 시 두번 쓰기방지(델타레이크: txnVersion, txnAddId) |
-|  | **Exclusive Choice
-
-하나의 부모에서 조건에 따라 한 갈래만 선택** | 특정 날짜 이후 새 로직, 이전 날짜는 구 로직 | 조건에 따라 경로 선택 | [+] 분기 남발 시 복잡도 폭증
-[-] 필요 없는 경로 실행 방지 |   1. Airflow: BranchPythonOperator, if-else, switch
-  2. Spark: factory pattern
-if-else, switch, factory pattern |
-| Orchestration | **Single Runner
-
-같은 파이프라인은 항상 하나만 실행** | incremental/stateful 처리 | 순차성 보장 | [+] 논리적 정합성 보장
-[-] 느린 처리, 높은 backfill 비용 |   1. Airflow:`max_active_runs=1`, `depends_on_past=True` 
-  2. aws EMR: StepConcurrencyLevel 매개변수
- |
-|  | **Concurrent Runner
-
-같은 파이프라인을 여러 개 동시 실행** | 독립 실행인데 순차 실행 때문에 병목 발생 | 처리량과 지연 개선 | [+] 지연 완화, backfill 가속
-[-] resource starvation(workload management),
-shared state 충돌 |   1. Airflow: `max_active_runs>1` |
+| Sequence | **Local Sequencer<br>같은 파이프라인/같은 잡 안에서 순차 실행** | 실패 시 처음부터 재실행, 코드 비대화, 디버깅 어려움 | 큰 작업을 작은 순차 단계로 분해 | [+] 비싼 단계 재실행 방지 가능 <br> [-] 너무 잘게 쪼개면 스케줄링 부담 증가 |   1. Airflow: `>>`, <br>  2. aws EMR: Step API(실패시 의존성 구성 필요) ← vs CRON(간결; 독립성x) |
+|  | **Isolated Sequencer<br>서로 분리된 파이프라인 간 순차 의존** | 팀 간 책임 분리, 독립 파이프라인 협업 | 분리된 파이프라인 사이 의존성 연결 | [+] 팀별 분리 운영 가능<br>[-] 스케줄 정합성, 커뮤니케이션 비용 |   1. airflow(waiter컴포넌트, <br>  • 암묵적 데이터(sensor) 의존성 <br>• 2개 연산자marker&sensor 독립적 사용 |
+| Fan-In | **Aligned Fan-In<br>여러 부모가 모두 성공→ 자식 실행** | 여러 부분 결과가 모두 필요함 | 병렬 브랜치 결과를 정확하게 합치기 | [+] 작은 병렬 작업으로 빠른 피드백<br>[-] 인프라 스파이크, skew, 스케줄링 오버헤드 |   • (여러 브랜치 + 공통 child)<br>1. Airflow: for문 안 파이프라인 시퀀스 1번만 정→전용태스크 생성 후 공통 상위태스크에 연결<br>  2. SQL: `UNION`, `JOIN`<br>  3. Spark: `unionByName` |
+|  | **Unaligned Fan-In <br>일부 부모 실패를 허용→ 자식 실행** | 일부 입력 누락 때문에 전체 결과가 막힘 | 실패 일부를 허용한 채 결과 생성 | [+] 전체 지연 감소<br>[-] partial 품질 고지 필요, 흐름 이해 어려움 |   • (올바른 트리거 설정 사용)<br>  1. Airflow: `trigger_rule=ALL_DONE`, 서브쿼리 활용~새로운 플래그(완전한 입력 데이터에 기반한것인지 유무 확인)<br>  2. aws: step function(덜 선언적인 구현)detector(1회)<br> →processor(성공여부 플래그생성)<br> →creator(오류가 있다면 테이블에 메타데이터 주석) |
+| Fan-Out | **Parallel Split<br>하나의 부모에서 여러 자식이 병렬 분기** | 같은 데이터를 두 군데 이상에 써야 함 | 공통 입력 기반 다중 후속 처리 | [+] 공통 입력 재사용, 다중 처리 효율<br>[-] 느린 브랜치가 병목, 하드웨어 불일치 문제 |   1. Airflow 공통 부모 후 여러 downstream<br>  2. Spark: `persist()` 후 다중 write<br>  3. 재시도 시 두번 쓰기방지(델타레이크: txnVersion, txnAddId) |
+|  | **Exclusive Choice<br>하나의 부모에서 조건에 따라 한 갈래만 선택** | 특정 날짜 이후 새 로직, 이전 날짜는 구 로직 | 조건에 따라 경로 선택 | [+] 분기 남발 시 복잡도 폭증<br>[-] 필요 없는 경로 실행 방지 |   1. Airflow: BranchPythonOperator, if-else, switch<br>  2. Spark: factory pattern<br>if-else, switch, factory pattern |
+| Orchestration | **Single Runner<br>같은 파이프라인은 항상 하나만 실행** | incremental/stateful 처리 | 순차성 보장 | [+] 논리적 정합성 보장<br>[-] 느린 처리, 높은 backfill 비용 |   1. Airflow:`max_active_runs=1`, `depends_on_past=True` <br> 2. aws EMR: StepConcurrencyLevel 매개변수 |
+|  | **Concurrent Runner<br>같은 파이프라인을 여러 개 동시 실행** | 독립 실행인데 순차 실행 때문에 병목 발생 | 처리량과 지연 개선 | [+] 지연 완화, backfill 가속<br>[-] resource starvation(workload management),shared state 충돌 |   1. Airflow: `max_active_runs>1` |
 
 ## Choice
 
 | 질문(trade-off) | 관련 패턴 |
 | --- | --- |
-| 무엇이 하나의 실행 단위여야 하는가? | Local Sequencer, 
-Fan-In/Fan-Out 전반 |
+| 무엇이 하나의 실행 단위여야 하는가? | Local Sequencer, <br> Fan-In/Fan-Out 전반 |
 | 무엇을 독립적으로 재시작해야 하는가? | Local Sequencer, Aligned Fan-In |
 | 부분 결과를 허용할 것인가? | Aligned Fan-In vs Unaligned Fan-In |
 | 팀 경계 때문에 파이프라인을 분리해야 하는가? | Isolated Sequencer |
