@@ -12,3 +12,6 @@
 # key takeaway
 - 표준화의 중요성; 만들기에 급급
 - 레거시들; 모니터링이 어려움.
+
+# reference
+- https://github.com/bartosz25/data-engineering-design-patterns-book.git : 추후에 책 복습하면서 코드 참조해서 실습하기
